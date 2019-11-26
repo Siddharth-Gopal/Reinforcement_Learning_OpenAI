@@ -1,5 +1,5 @@
 # import tensorflow-gpu as tf
-from QNetworkKeras import QNetworkKerasMountatin
+from QNetworkKerasPER import QNetworkKerasMountatin
 from ReplayMemory import ReplayMemory, SumTree, ReplayMemoryPER
 import gym
 import math
@@ -39,17 +39,17 @@ class DQAgent():
         self.history_len = 4  # taken from (84,84,4)
         self.update_target_every = 5  # number of episodes to update the target network in
         self.train_model_every = 1500  # number of trials to train the behaviour model in
-        self.batch_size = 16  # batch size for training the behaviour model
+        self.batch_size = 50  # batch size for training the behaviour model
         self.stats_every = 5  # number of episodes to take the stats in, to produce a graph at the end
         self.stats = {'episode': [], 'avg': [], 'max': [], 'min': [], 'avg_len': [], 'epsilon': []}
         self.key_control = {'left': 0, 'stay': 1, 'right': 2}
 
         self.EPS_START = 1.0
-        self.EPS_END = 0.01
+        self.EPS_END = 0.05
         self.LAMBDA = 0.0001
 
         # epsilon value will exponentially decay in EPS_DECAY number of episodes
-        self.EPS_DECAY = 10000
+        self.EPS_DECAY = 120
         self.EPS_BASE = self.EPS_END / self.EPS_START
 
     def load_prev_weights(self):
@@ -57,16 +57,23 @@ class DQAgent():
             self.Qnet.behaviour_model.load_weights(self.load_model_from)
             self.Qnet.target_model.load_weights(self.load_model_from)
 
-    def choose_action(self, state, trial_num):
+    def choose_action(self, state, episode_num):
 
+        # Exponential method 1
         # epsilon thresh will exponentially decay till self.EPS_DECAY and then stay constant at self.EPS_END
-        # if episode_num < self.EPS_DECAY:
-        #     epsilon_thresh = self.EPS_START * math.pow(self.EPS_BASE, (episode_num / self.EPS_DECAY))
-        # else:
-        #     epsilon_thresh = self.EPS_END
+        if episode_num < self.EPS_DECAY:
+            epsilon_thresh = self.EPS_START * math.pow(self.EPS_BASE, (episode_num / self.EPS_DECAY))
+        else:
+            epsilon_thresh = self.EPS_END
 
+
+        # Exponential method 2
         # Epsilon value will decay with every action taken exponentially from 1.0 to 0.01
-        epsilon_thresh = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-self.LAMBDA * trial_num)
+        # epsilon_thresh = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-self.LAMBDA * trial_num)
+
+
+        # Linear method
+
 
         epsilon = random.random()
 
@@ -248,8 +255,10 @@ class DQAgent():
 
                 new_frame, reward, termination, info = env.step(action=action)
 
+
                 # Using x position as reward for the agent
                 reward = self.modify_reward(reward, new_frame[0])
+                episode_reward += reward
 
                 # For Debugging
                 prev_actions.append(action)
@@ -257,7 +266,7 @@ class DQAgent():
                 if termination:
                     # Add the other info corresponding to the frame added earlier
                     replay_mem.others.append([reward, int(action), termination])
-                    episode_reward += reward
+
 
                     # Debugging: train the model with 50 sample states after every step
                     # # Train network, and save the weights
@@ -279,7 +288,7 @@ class DQAgent():
                     # Add the other info corresponding to the frame added earlier
                     replay_mem.others.append([reward, int(action), termination])
                     frame = new_frame
-                    episode_reward += reward
+
                     self.train_model(replay_mem, len(replay_mem.frames), 50)
 
                 # Used if you want to analyse the current frame
@@ -296,52 +305,52 @@ class DQAgent():
                     # plt.imshow(frame)
                     # plt.show()
 
-                if keyboard.is_pressed('i'):
-                    time.sleep(1)
-
-                    # def key2int(key_string):
-                    #     return()
-                    imit_counter = 10
-                    while True:
-                        imit_counter += 1
-                        action = keyboard.read_key()
-
-                        if keyboard.is_pressed('esc'):
-                            break
-                        try:
-                            action = self.key_control[action]
-                        except:
-                            print('You pressed the wrong key')
-                            continue
-
-                        # # TODO: if no button is pressed than the action should be no operation, or else the key pressed must be used as action to
-                        # # control the game for imitation learning. This can be achieved by using this
-                        # # also have a look at keyboard_test .py
-                        #
-                        # keyboard.add_hotkey('left', key2int, args='left', timeout=0.1)
-                        # keyboard.add_hotkey('right', key2int, args='right', timeout=0.1)
-                        # keyboard.add_hotkey('space', key2int, args='space', timeout=0.1)
-
-                        env.render()
-                        new_frame, reward, termination, info = env.step(action)
-                        reward = self.modify_reward(reward, new_frame[0])
-                        print('action: ', action)
-                        print('reward: ', reward)
-
-                        replay_mem.frames.append(frame)
-                        replay_mem.others.append([reward, int(action), termination])
-                        frame = new_frame
-
-                        trial_num += 1
-                        # Train network, and save the weights
-                        if trial_num % self.train_model_every == 0 and len(replay_mem.frames) > 8:
-                            self.train_model(replay_mem, imit_counter, 500, epochs = 5)
-
-                        if termination:
-                            env.close()
-
-                            break
-                    break
+                # if keyboard.is_pressed('i'):
+                #     time.sleep(1)
+                #
+                #     # def key2int(key_string):
+                #     #     return()
+                #     imit_counter = 10
+                #     while True:
+                #         imit_counter += 1
+                #         action = keyboard.read_key()
+                #
+                #         if keyboard.is_pressed('esc'):
+                #             break
+                #         try:
+                #             action = self.key_control[action]
+                #         except:
+                #             print('You pressed the wrong key')
+                #             continue
+                #
+                #         # # TODO: if no button is pressed than the action should be no operation, or else the key pressed must be used as action to
+                #         # # control the game for imitation learning. This can be achieved by using this
+                #         # # also have a look at keyboard_test .py
+                #         #
+                #         # keyboard.add_hotkey('left', key2int, args='left', timeout=0.1)
+                #         # keyboard.add_hotkey('right', key2int, args='right', timeout=0.1)
+                #         # keyboard.add_hotkey('space', key2int, args='space', timeout=0.1)
+                #
+                #         env.render()
+                #         new_frame, reward, termination, info = env.step(action)
+                #         reward = self.modify_reward(reward, new_frame[0])
+                #         print('action: ', action)
+                #         print('reward: ', reward)
+                #
+                #         replay_mem.frames.append(frame)
+                #         replay_mem.others.append([reward, int(action), termination])
+                #         frame = new_frame
+                #
+                #         trial_num += 1
+                #         # Train network, and save the weights
+                #         if trial_num % self.train_model_every == 0 and len(replay_mem.frames) > 8:
+                #             self.train_model(replay_mem, imit_counter, 500, epochs = 5)
+                #
+                #         if termination:
+                #             env.close()
+                #
+                #             break
+                #     break
 
                 # # Debugging: train the model with 50 sample states after every step
                 # # Train network, and save the weights
@@ -349,6 +358,7 @@ class DQAgent():
                 #     self.train_model(replay_mem, len(replay_mem.frames), 50)
 
                 # Used if you want to plot the current stats so far
+
                 if keyboard.is_pressed('p'):
                     fig, ax = plt.subplots(3, 1)
 
@@ -382,12 +392,12 @@ class DQAgent():
                 self.Qnet.behaviour_model.save(self.save_model_as)
 
             if episode % self.stats_every == 0:
-                avg_reward = sum(ep_rewards[len(ep_rewards) - self.stats_every:]) / self.stats_every
-                avg_len = sum(ep_lengths[len(ep_lengths) - self.stats_every:]) / self.stats_every
+                avg_reward = sum(ep_rewards[-self.stats_every:]) / self.stats_every
+                avg_len = sum(ep_lengths[-self.stats_every:]) / self.stats_every
                 self.stats['episode'].append(episode)
                 self.stats['avg'].append(avg_reward)
-                self.stats['max'].append(max(ep_rewards[len(ep_rewards) - self.stats_every:], default=0))
-                self.stats['min'].append(min(ep_rewards[len(ep_rewards) - self.stats_every:], default=0))
+                self.stats['max'].append(max(ep_rewards[-self.stats_every:], default=0))
+                self.stats['min'].append(min(ep_rewards[-self.stats_every:], default=0))
                 self.stats['avg_len'].append(avg_len)
                 self.stats['epsilon'].append(epsilon)
 
@@ -449,9 +459,14 @@ class DQAgent():
 
 
         # batch_data consists of state, action, reward, new_state, termination
+        # tree indices are the indices of the nodes in the tree, this is different from dataindx which are
+        # indices of the leaves of the of the tree
+        # print('Tree total: ', self.replay_mem.tree.total())
         tree_indices, ISweights, batch_data = self.replay_mem.sample(self.batch_size)
+        # print('ISweight: ', ISweights)
 
         current_states = np.asarray([data[0] for data in batch_data])
+        # print('current states: ', current_states)
         actions = np.asarray([data[1] for data in batch_data])
         rewards = np.asarray([data[2] for data in batch_data])
         future_states = np.asarray([data[3] for data in batch_data])
@@ -472,24 +487,36 @@ class DQAgent():
 
 
         # Used in DDQN
-        current_qs = self.Qnet.behaviour_model.predict(current_states)
 
-        #future_beh_action has shape (batch_size,)
+        # shape (batch_size, num_actions)
+        current_qs = self.Qnet.behaviour_model.predict(current_states)
+        # print(current_qs)
+
+        #future_beh_best_action has shape (batch_size,)
         future_behaviour_qs = self.Qnet.behaviour_model.predict(future_states)
         future_beh_best_action = np.argmax(future_behaviour_qs, axis=1)
 
         #shape (batch_size, num_actions)
         future_target_qs = self.Qnet.target_model.predict(future_states)
 
-        DDQN_targets =
+        DDQN_targets = np.copy(current_qs)
+        absolute_errors = np.empty((self.batch_size,), dtype=np.float32)
         for i, action in enumerate(future_beh_best_action):
-            DDQN_targets
+            if terminations[i]:
+                target = rewards[i]
 
-        # DDQN_targets = np.asarray([future_target_qs[action] for action in future_beh_best_action )
+            else:
+                target = rewards[i] + self.gamma*future_target_qs[i][action]
 
+            absolute_errors[i] = np.abs(target - current_qs[i][actions[i]])
+            # print('target: ', target)
+            # print('currentqs: ', current_qs[i][actions[i]])
+            # print(absolute_errors[i])
+            DDQN_targets[i][actions[i]] = target
 
-
-
+        self.Qnet.behaviour_model.fit(current_states, DDQN_targets, sample_weight=ISweights, verbose=0)
+        # print(absolute_errors)
+        self.replay_mem.update_tree(tree_indices, absolute_errors)
 
 
     def run(self):
@@ -497,16 +524,18 @@ class DQAgent():
         # num of episodes the agent must play randomly and add the the replay memory
         self.random_play(1)
         trial_num = 0
+        ep_rewards = []
+        ep_lengths = []
 
         for episode in range(self.max_episodes):
             state = self.env.reset()
-            total_reward = 0
+            episode_reward = 0
             if episode % self.update_target_every:
-                self.Qnet.target_model.set_weights(self.Qnet.behaviour_model.get_weights())
+                self.Qnet.update_target_model()
 
             for step in range(self.max_steps):
 
-                action, epsilon_thresh, _ = self.choose_action(state, trial_num)
+                action, epsilon_thresh, _ = self.choose_action(state, episode)
                 trial_num += 1
                 self.env.render()
 
@@ -520,23 +549,58 @@ class DQAgent():
                 elif new_state[0] >= 0.5:
                     reward += 100
 
-                total_reward+=reward
+                episode_reward+=reward
 
                 # Adding state, action, reward, new_state, termination
                 self.replay_mem.add([state, action, reward, new_state, termination])
 
                 # This will take self.batch_size random samples, find out the td target for each transition
                 # and then use the entire batch to train the behaviour model
+                # print('transition: ', [state, action, reward, new_state, termination])
 
                 self.train_model_mountain()
+                # print('trial num: ', trial_num)
 
                 state = new_state
 
                 if termination:
                     self.env.close()
-                    print('episode num: ', episode, ' Total Reward: ', total_reward, 'Epsilon: ', epsilon_thresh)
+                    ep_rewards.append(episode_reward)
+                    ep_lengths.append(step)
+                    print('episode num: ', episode, ' Total Reward: ', episode_reward, 'Epsilon: ', epsilon_thresh)
                     break
 
+                # Used if you want to plot the current stats so far
+                if keyboard.is_pressed('p'):
+                    fig, ax = plt.subplots(3, 1)
+
+                    ax[0].plot(self.stats['episode'], self.stats['avg'], label="average rewards", color='b')
+                    ax[0].plot(self.stats['episode'], self.stats['max'], label="max rewards", color='g')
+                    ax[0].plot(self.stats['episode'], self.stats['min'], label="min rewards", color='r')
+                    ax[0].legend()
+
+                    ax[1].plot(self.stats['episode'], self.stats['avg_len'], label="episode length", color='m')
+                    ax[1].legend()
+
+                    ax[2].plot(self.stats['episode'], self.stats['epsilon'], label='epsilon thresh', color='c')
+                    ax[2].legend()
+
+                    # plt.legend()
+                    plt.savefig('model1visual.jpg')
+                    plt.close()
+
+            if episode % self.stats_every == 0:
+                avg_reward = sum(ep_rewards[-self.stats_every:]) / self.stats_every
+                avg_len = sum(ep_lengths[-self.stats_every:]) / self.stats_every
+                self.stats['episode'].append(episode)
+                self.stats['avg'].append(avg_reward)
+                self.stats['max'].append(max(ep_rewards[-self.stats_every:], default=0))
+                self.stats['min'].append(min(ep_rewards[-self.stats_every:], default=0))
+                self.stats['avg_len'].append(avg_len)
+                self.stats['epsilon'].append(epsilon_thresh)
+
+            if episode % self.save_model_every:
+                self.Qnet.behaviour_model.save(self.save_model_as)
 
 
 

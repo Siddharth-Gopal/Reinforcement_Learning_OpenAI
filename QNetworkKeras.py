@@ -151,3 +151,31 @@ class QNetworkKerasMountatin():
 
 
         return action_values, q_max, max_q_ind
+
+    def update_target_model(self):
+        self.target_model.set_weights(self.behaviour_model.get_weights())
+
+    # def train_model(self, replay_memory, input_state, targets, sess):
+
+
+#     # TODO: Use the replay memore to train the Qnetwork
+
+
+
+def print_trainable(self):
+    # variables_names = [v.name for v in tf.trainable_variables()]
+
+    # for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
+    #     print(var)
+
+    for var in tf.trainable_variables():
+        print(var)
+    # init = tf.global_variables_initializer()
+    # with tf.Session() as sess:
+    #     sess.run(init)
+    #     values = sess.run(variables_names)
+    #     print(values)
+
+
+
+

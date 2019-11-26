@@ -2,6 +2,7 @@ import tensorflow as tf
 import cv2
 import numpy as np
 from collections import deque
+import random
 
 
 #SumTree class taken from https://github.com/jaromiru/AI-blog/blob/348628b105058d876001ca758b6ba59fb1726614/SumTree.py#L3
@@ -13,6 +14,7 @@ class SumTree:
         self.capacity = capacity
         self.tree = np.zeros(2 * capacity - 1)
         self.data = np.zeros(capacity, dtype=object)
+        self.populated_tree = False
 
     def _propagate(self, idx, change):
         parent = (idx - 1) // 2
@@ -46,6 +48,7 @@ class SumTree:
         self.write += 1
         if self.write >= self.capacity:
             self.write = 0
+            self.populated_tree = True
 
     def update(self, idx, p):
         change = p - self.tree[idx]
@@ -148,10 +151,10 @@ class ReplayMemoryPER:
     def __init__(self, capacity):
         self.tree = SumTree(capacity)
 
-        self.abs_upper_priority = 1.0
+        self.abs_upper_error = 1.0
         self.PER_b = 0.5
         # how much the value must increment per step
-        self.PER_b_increment = 0.05
+        self.PER_b_increment = 0.001
 
         # Hyper parameter to tune replay memory between prioritization and random sampling
         self.PER_a = 0.4
@@ -163,26 +166,43 @@ class ReplayMemoryPER:
         # We initialize all new experiences with max priority so that they would at least be used to train once
         max_priority = np.max(self.tree.tree[-self.tree.capacity:])
         if max_priority == 0:
-            max_priority = self.abs_upper_priority
+            max_priority = self.abs_upper_error
 
         self.tree.add(max_priority, transition)
 
+    def update_tree(self, tree_indices, absolute_errors):
+        absolute_errors += self.PER_e
+        clipped_errors = np.minimum(absolute_errors, self.abs_upper_error)
+        priorities = np.power(clipped_errors, self.PER_a)
+
+        for idx, priority in zip(tree_indices, priorities):
+            self.tree.update(idx, priority)
+        # print('replaymem tree total: ',self.tree.total())
+
+
     def sample(self, n):
 
-        self.PER_b += self.PER_b_increment
+        self.PER_b = np.min([1.0, self.PER_b + self.PER_b_increment])
         priority_slice = self.tree.total() / n
-        min_priority = np.min(self.tree.tree[-self.tree.capacity:])
+        if self.tree.populated_tree:
+            min_priority = np.min(self.tree.tree[-self.tree.capacity:])
+        else:
+            min_priority = np.min(self.tree.tree[-self.tree.capacity:-self.tree.capacity + self.tree.write])
+        if min_priority==0:
+            min_priority = 0.001
         max_ISweight = np.power(n*min_priority, -self.PER_b)
 
+        # print('Max IS weight: ', max_ISweight)
         batch_ISweights = np.empty(n, dtype=np.float32)
         batch_tree_indices = np.empty(n, dtype=np.int32)
         batch_data = []
 
         for i in range(n):
             a, b = i*priority_slice, (i+1)*priority_slice
-            r = np.random.uniform(a, b)
+            r = random.uniform(a, b)
 
             idx, priority, data = self.tree.get(r)
+            # print('priority: ',  idx, priority, data)
             # ISweights are divided by max weight in order to avoid very large values
             batch_ISweights[i] = np.power((n*priority), -self.PER_b) / max_ISweight
             batch_tree_indices[i] = idx
